@@ -325,6 +325,7 @@
   let dragTarget = null;
   
   let usingGamepad = false;
+  let wasUIOpen = false;
   const hideGamepadCursor = () => { usingGamepad = false; if (vCursor) vCursor.style.display = 'none'; };
   document.addEventListener('mousemove', hideGamepadCursor);
   document.addEventListener('mousedown', hideGamepadCursor);
@@ -375,6 +376,12 @@
       usingGamepad = true;
     }
 
+    if (uiOpen && !wasUIOpen) {
+      cursorX = window.innerWidth / 2;
+      cursorY = window.innerHeight / 2;
+    }
+    wasUIOpen = uiOpen;
+
     if (uiOpen) {
       if (!vCursor) {
         vCursor = document.getElementById('virtual-cursor');
@@ -388,8 +395,6 @@
       if (usingGamepad) {
         if (vCursor.style.display !== 'block') {
           vCursor.style.display = 'block';
-          cursorX = window.innerWidth / 2;
-          cursorY = window.innerHeight / 2;
         }
       } else {
         if (vCursor.style.display === 'block') vCursor.style.display = 'none';
