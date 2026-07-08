@@ -1962,8 +1962,8 @@
   "peligro": 0,
   "bioma": "oficinas",
   "tam": [
-   44,
-   40
+   72,
+   64
   ],
   "paleta": {
    "suelo": "#2a1a30",
@@ -1972,8 +1972,8 @@
    "luz": "#ff88ff",
    "fondo": "#080410"
   },
-  "vision": 8,
-  "oscuridad": 0.3,
+  "vision": 7,
+  "oscuridad": 0.38,
   "descripcion": "El Natatorio de Neón: piscinas púrpuras interminables de estética futurista, máquinas expendedoras y calma. Uno de los pocos rincones amables de las Backrooms. El daño que sufre el nivel se cura solo.",
   "cita": "La Tierra Prometida, la llaman. Nadie quiere marcharse. Quizá ese sea el problema.",
   "reglas": [],
@@ -2226,8 +2226,8 @@
   "peligro": 1,
   "bioma": "oficinas",
   "tam": [
-   44,
-   40
+   82,
+   72
   ],
   "paleta": {
    "suelo": "#d8d4cc",
@@ -2236,8 +2236,8 @@
    "luz": "#ffffff",
    "fondo": "#0c0c0a"
   },
-  "vision": 8,
-  "oscuridad": 0.2,
+  "vision": 6,
+  "oscuridad": 0.36,
   "descripcion": "Una casa blanca inmensa, eternamente en reformas: escaleras de mano, brochas y pintura fresca por todas partes. Cada año hay más habitaciones. El Hacedor nunca deja de construir, y nadie lo ha visto.",
   "cita": "En 2016 contamos 52 habitaciones. Hoy son 77. Nadie ha visto obreros.",
   "reglas": [
@@ -2437,8 +2437,8 @@
   "peligro": 1,
   "bioma": "exterior",
   "tam": [
-   50,
-   50
+   90,
+   90
   ],
   "paleta": {
    "suelo": "#c8d4e0",
@@ -2447,8 +2447,8 @@
    "luz": "#fff8f0",
    "fondo": "#182028"
   },
-  "vision": 7,
-  "oscuridad": 0.3,
+  "vision": 6,
+  "oscuridad": 0.38,
   "descripcion": "Un paseo de linternas bajo la última nevada. El frío cala despacio y las farolas de papel parpadean con calidez extraña. Es tranquilo. Demasiado tranquilo para las Backrooms.",
   "cita": "Camina contigo mismo. Solamente.",
   "reglas": [
@@ -2615,8 +2615,8 @@
   "peligro": 3,
   "bioma": "exterior",
   "tam": [
-   50,
-   50
+   100,
+   100
   ],
   "paleta": {
    "suelo": "#e8e8ea",
@@ -2625,8 +2625,8 @@
    "luz": "#ffffff",
    "fondo": "#a0a0a8"
   },
-  "vision": 9,
-  "oscuridad": 0.05,
+  "vision": 7,
+  "oscuridad": 0.08,
   "descripcion": "Blancura absoluta en dos mundos gemelos donde la gravedad apenas existe. Tus pertenencias desaparecen al entrar. Hay comida de sobra y nada más: la tortura aquí no es el hambre, es el silencio.",
   "cita": "Los que se quedan demasiado acaban convertidos en Insanity. Los que se van, casi.",
   "reglas": [
@@ -3142,8 +3142,8 @@
   "peligro": 4,
   "bioma": "oficinas",
   "tam": [
-   50,
-   44
+   66,
+   58
   ],
   "paleta": {
    "suelo": "#282828",
@@ -3202,8 +3202,8 @@
   "peligro": 2,
   "bioma": "oficinas",
   "tam": [
-   50,
-   44
+   66,
+   58
   ],
   "paleta": {
    "suelo": "#d8d4ca",
@@ -3212,8 +3212,8 @@
    "luz": "#fff4d8",
    "fondo": "#090807"
   },
-  "vision": 8,
-  "oscuridad": 0.25,
+  "vision": 7,
+  "oscuridad": 0.3,
   "descripcion": "Un espacio de mármol al que se accede por túneles que aparecen bajo puentes de Level 306.",
   "cita": "El mármol no guarda pisadas, pero sí recuerda direcciones.",
   "reglas": [],
@@ -3251,8 +3251,8 @@
   "peligro": 2,
   "bioma": "oficinas",
   "tam": [
-   56,
-   44
+   72,
+   58
   ],
   "paleta": {
    "suelo": "#5c3a2e",
@@ -3261,8 +3261,8 @@
    "luz": "#ffd890",
    "fondo": "#090604"
   },
-  "vision": 8,
-  "oscuridad": 0.3,
+  "vision": 7,
+  "oscuridad": 0.34,
   "descripcion": "Una bolera interminable donde ciertas puertas y partidas perfectas conectan con Level 399.",
   "cita": "Las pistas siempre esperan otro lanzamiento.",
   "reglas": [],
@@ -3309,8 +3309,8 @@
   "peligro": 2,
   "bioma": "oficinas",
   "tam": [
-   54,
-   46
+   72,
+   60
   ],
   "paleta": {
    "suelo": "#34404a",
@@ -3320,7 +3320,7 @@
    "fondo": "#05080a"
   },
   "vision": 7,
-  "oscuridad": 0.35,
+  "oscuridad": 0.38,
   "descripcion": "Un entorno conectado a ordenadores antiguos y sistemas operativos modernos fuera de lugar.",
   "cita": "La pantalla azul no es un error. Es una puerta.",
   "reglas": [
