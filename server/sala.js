@@ -20,6 +20,18 @@ function cardinalDe(th) {
   return [[0, -1], [1, 0], [0, 1], [-1, 0]][k];
 }
 const r2 = (v) => Math.round(v * 100) / 100;
+const SALA_PUBLICA = 'publica';
+const RE_GRUPO_PRIVADO = /^[a-z0-9_-]{3,32}$/;
+
+function grupoSala(raw) {
+  const s = String(raw || '').trim().toLowerCase();
+  return s && RE_GRUPO_PRIVADO.test(s) ? s : SALA_PUBLICA;
+}
+
+function claveInterna(nivelId, inst, grupo) {
+  grupo = grupoSala(grupo);
+  return `${grupo}::${nivelId}::${inst}`;
+}
 
 // ¿Se puede ir de A a B sin cruzar nada sólido? Muestreo cada ~0.2 tiles con
 // radio tolerante (0.22 vs 0.35 del cuerpo): los puntos reportados ya pasaron
@@ -35,13 +47,21 @@ function caminoLegal(grid, x0, y0, x1, y1) {
   return true;
 }
 
+function destinoDisponible(def) {
+  return def && def.destino && DATA.levels[def.destino];
+}
+
 class Sala {
-  constructor(nivelId, inst) {
+  constructor(nivelId, inst, grupo = SALA_PUBLICA) {
     this.nivelId = nivelId;
     this.inst = inst;
-    this.clave = `${nivelId}::${inst}`;
+    this.grupo = grupoSala(grupo);
+    this.privada = this.grupo !== SALA_PUBLICA;
+    this.clave = this.privada ? `${nivelId}::privada::${inst}` : `${nivelId}::${inst}`;
     // La semilla es el contrato con el cliente: mismo string → mismo mapa.
-    this.semilla = `mmo::${nivelId}::${inst}`;
+    this.semilla = this.privada
+      ? `mmo::privada::${this.grupo}::${nivelId}::${inst}`
+      : `mmo::${nivelId}::${inst}`;
     const { def, map } = generarMapa(nivelId, this.semilla);
     this.def = def;
     this.map = map;
@@ -99,7 +119,7 @@ class Sala {
     const jug = {
       id, ws, nombre, token, x, y, rot: Math.PI, // θ continuo (π = mirando al sur)
       distSala: 0,
-      salud: 100, luz: false, escondido: null, muerto: false,
+      salud: 100, sed: 100, cordura: 100, luz: false, escondido: null, muerto: false,
       inv: [], manos: [null, null], equipo: { cara: null, cuerpo: null, pies: null },
       esAdmin: false, muteadoHasta: 0,
       ultMov: 0, ultChat: 0, canal: null, ofertaEn: null,
@@ -112,8 +132,8 @@ class Sala {
     this.prepararCaminata(jug);
     this.enviar(ws, {
       t: 'bienvenida', id, nivel: this.nivelId, inst: this.inst,
-      semilla: this.semilla, x, y, rot: jug.rot, sec: 0,
-      salud: jug.salud, inv: jug.inv, manos: jug.manos,
+      semilla: this.semilla, privada: this.privada, x, y, rot: jug.rot, sec: 0,
+      salud: jug.salud, sed: jug.sed, cordura: jug.cordura, inv: jug.inv, manos: jug.manos, equipo: jug.equipo,
       caminata: jug.caminataObjetivo ? { pasos: 0, objetivo: jug.caminataObjetivo } : null,
       jugadores: this.censo(), ...this.estadoDinamico(),
     });
@@ -129,7 +149,7 @@ class Sala {
   prepararCaminata(jug) {
     jug.pasosSala = 0;
     jug.distSala = 0;
-    jug.caminataObjetivo = (this.map.caminatas || []).length
+    jug.caminataObjetivo = (this.map.caminatas || []).some(destinoDisponible)
       ? MapGen.walkingGoal(this.def, `${jug.token}::${this.clave}`, 1, 0)
       : 0;
   }
@@ -138,6 +158,64 @@ class Sala {
     this.enviar(jug.ws, {
       t: 'inv', inv: jug.inv, manos: jug.manos, equipo: jug.equipo,
     });
+  }
+
+  enviarEstado(jug) {
+    this.enviar(jug.ws, { t: 'estado', salud: jug.salud, sed: jug.sed, cordura: jug.cordura });
+  }
+
+  herir(jug, cantidad, causa) {
+    jug.salud = Math.max(0, jug.salud - cantidad);
+    this.enviarEstado(jug);
+    if (jug.salud <= 0) this.morir(jug, causa);
+  }
+
+  supervivencia(jug, distancia) {
+    if (distancia <= 0 || jug.muerto) return;
+    jug._supervivencia = (jug._supervivencia || 0) + distancia;
+    const pasos = Math.floor(jug._supervivencia / 4);
+    if (!pasos) return;
+    jug._supervivencia -= pasos * 4;
+    const reglas = this.def.reglas || [];
+    const posesion = new Set([...(jug.inv || []), ...(jug.manos || []), ...Object.values(jug.equipo || {})].filter(Boolean));
+    const trajeHostil = posesion.has('avmh');
+    const proteccionQuimica = trajeHostil || posesion.has('repelente_corrosion');
+    const mascara = jug.equipo.cara === 'mascara_gas' || trajeHostil || proteccionQuimica;
+    const chaqueta = jug.equipo.cuerpo === 'chaqueta' || trajeHostil;
+    const botas = jug.equipo.pies === 'botas_reforzadas';
+    // sed y cordura drenan por TILES reales acumulados con la MISMA cadencia
+    // que el modo offline (1 turno ≈ 1 tile: sed base -1/9, calor -1/4;
+    // cordura -1/20 con zumbido o -1/25 con alucinaciones/aislamiento/
+    // vigilado, doblado con máscara/protección). Antes se descontaba por
+    // "pasos" de 4 tiles con Math.ceil(), 5-6× más rápido de lo debido y sin
+    // que la máscara marcara diferencia real (ceil(1/8) y ceil(1/4) daban 1).
+    const tiles = pasos * 4;
+    jug._sedAcum = (jug._sedAcum || 0) + tiles;
+    const cadSed = reglas.includes('calor') ? 4 : 9;
+    if (jug._sedAcum >= cadSed) {
+      const n = Math.floor(jug._sedAcum / cadSed);
+      jug._sedAcum -= n * cadSed;
+      jug.sed = Math.max(0, jug.sed - n);
+    }
+    if (reglas.some((r) => ['zumbido', 'alucinaciones', 'aislamiento', 'vigilado'].includes(r))) {
+      jug._corduraAcum = (jug._corduraAcum || 0) + tiles;
+      const cadCordura = (reglas.includes('zumbido') ? 20 : 25) * (mascara ? 2 : 1);
+      if (jug._corduraAcum >= cadCordura) {
+        const n = Math.floor(jug._corduraAcum / cadCordura);
+        jug._corduraAcum -= n * cadCordura;
+        jug.cordura = Math.max(0, jug.cordura - n);
+      }
+    }
+    if (reglas.includes('frio') && !chaqueta) this.herir(jug, pasos, 'el frío');
+    // Los charcos sirena son una amenaza física del terreno: las botas
+    // anulan el arrastre cuando el jugador pisa una casilla de agua.
+    const tx = Fisica.tileDe(jug.x), ty = Fisica.tileDe(jug.y);
+    if (!jug.muerto && reglas.includes('agua_traicionera') && !botas &&
+        this.map.grid.t[ty * this.map.grid.w + tx] === 3)
+      this.herir(jug, pasos * 2, 'un charco sirena');
+    if (!jug.muerto && jug.sed === 0) this.herir(jug, pasos, 'la deshidratación');
+    if (!jug.muerto && jug.cordura === 0) this.morir(jug, 'perdiste la cordura');
+    if (!jug.muerto) this.enviarEstado(jug);
   }
 
   salir(jug) {
@@ -177,6 +255,7 @@ class Sala {
     if (jug.canal && Fisica.dist(m.x, m.y, jug.canal.origen[0], jug.canal.origen[1]) > 0.3)
       this.cancelarCanal(jug, 'Te apartas: dejas lo que estabas haciendo.');
     this.proximidad(jug);
+    this.supervivencia(jug, d);
     this.caminataAvanza(jug, d);
   }
 
@@ -190,8 +269,12 @@ class Sala {
       if (pasos % 20 === 0 || pasos >= jug.caminataObjetivo)
         this.enviar(jug.ws, { t: 'caminata', pasos, objetivo: jug.caminataObjetivo });
       if (pasos >= jug.caminataObjetivo) {
-        const defC = this.map.caminatas[0];
-        if (!defC) return;
+        const defC = (this.map.caminatas || []).find(destinoDisponible);
+        if (!defC) {
+          jug.caminataObjetivo = 0;
+          this.enviar(jug.ws, { t: 'aviso', txt: 'Ese camino no lleva a ninguna parte (nivel fuera del piloto).' });
+          return;
+        }
         if (this.alCruzar) this.alCruzar(jug, this, defC, { sinTarjeta: true });
       }
     }
@@ -280,7 +363,7 @@ class Sala {
     jug.inv.push(id);
     // tubería o linterna a una mano libre: lista para usar
     const m = jug.manos.indexOf(null);
-    if (m >= 0 && (id === 'tuberia' || id === 'linterna')) {
+    if (m >= 0 && (def.manos || def.efecto?.toggle === 'luz')) {
       jug.manos[m] = id;
       jug.inv.pop();
     }
@@ -320,7 +403,9 @@ class Sala {
     jug.canal = null;
     const ex = this.map.exits[c.i];
     if (!ex || ex.def._abierta) return;
-    const d = this.rng.int(1, 20);
+    let d = this.rng.int(1, 20);
+    if (jug.inv.includes('trebol') || jug.manos.includes('trebol') || Object.values(jug.equipo).includes('trebol'))
+      d = Math.min(20, d + 2);
     const esSuelo = ex.def._mec === 'romper_suelo';
     const umbral = c.herramienta ? 7 : (esSuelo ? 11 : 12);
     const exito = d >= umbral;
@@ -354,10 +439,152 @@ class Sala {
   }
 
   // ---------- manos: tubería (golpe hacia donde miras) y linterna ----------
+  aplicarNumericos(jug, def) {
+    const ef = def.efecto || {};
+    if (ef.salud) {
+      if (ef.salud < 0) this.herir(jug, Math.abs(ef.salud), def.nombre);
+      else jug.salud = Math.min(100, jug.salud + ef.salud);
+    }
+    if (ef.sed) jug.sed = Math.max(0, Math.min(100, jug.sed + ef.sed));
+    if (ef.cordura) jug.cordura = Math.max(0, Math.min(100, jug.cordura + ef.cordura));
+    if (ef.ruido) this.hacerRuido(jug.x, jug.y, ef.ruido);
+    this.enviarEstado(jug);
+    if (!jug.muerto && (jug.salud <= 0 || jug.sed <= 0 || jug.cordura <= 0))
+      this.morir(jug, def.nombre);
+  }
+
+  entidadesEnRadio(jug, radio) {
+    return this.entidades.filter((e) => e.viva && Fisica.dist(e.x, e.y, jug.x, jug.y) <= radio);
+  }
+
+  entidadFrontal(jug, rango) {
+    const [fx, fy] = cardinalDe(jug.rot ?? Math.PI);
+    let mejor = null, mejorD = Infinity;
+    for (const e of this.entidades) {
+      if (!e.viva) continue;
+      const dx = Math.round(e.x - jug.x), dy = Math.round(e.y - jug.y);
+      const delante = fx ? (Math.abs(dy) <= 1 && Math.sign(dx) === fx) : (Math.abs(dx) <= 1 && Math.sign(dy) === fy);
+      const d = Math.abs(dx) + Math.abs(dy);
+      if (delante && d <= rango && d < mejorD) { mejor = e; mejorD = d; }
+    }
+    return mejor;
+  }
+
+  danarEntidad(e, dano) {
+    e.vida -= dano;
+    e.revelada = true;
+    if (e.vida <= 0) { e.viva = false; this.difundir({ t: 'entMuere', uid: e.uid }); }
+    else this.difundir({ t: 'entHit', uid: e.uid });
+  }
+
+  usarActivoCatalogo(jug, def) {
+    const ef = def.efecto || {};
+    const radio = ef.radio || 3;
+    this.aplicarNumericos(jug, def);
+    if (jug.muerto) return true;
+    switch (ef.activo) {
+      case 'fuego':
+      case 'fuego_menor':
+      case 'toxina':
+      case 'gas':
+        for (const e of this.entidadesEnRadio(jug, radio)) {
+          this.danarEntidad(e, ef.dano || (ef.activo === 'fuego' ? 30 : 20));
+          if (ef.activo !== 'fuego_menor') e.huyendoHasta = Date.now() + 4000;
+        }
+        this.hacerRuido(jug.x, jug.y, ef.activo === 'fuego' ? 12 : 8);
+        this.difundir({ t: 'golpe', id: jug.id, x: jug.x, y: jug.y });
+        return true;
+      case 'paralisis':
+        for (const e of this.entidadesEnRadio(jug, radio || 1)) {
+          e.paralizadaHasta = Date.now() + 90000;
+          this.difundir({ t: 'entHit', uid: e.uid });
+        }
+        return true;
+      case 'disparo': {
+        const e = this.entidadFrontal(jug, 7);
+        this.hacerRuido(jug.x, jug.y, ef.radio || 10);
+        const [fx, fy] = cardinalDe(jug.rot ?? Math.PI);
+        this.difundir({ t: 'golpe', id: jug.id, x: jug.x + fx, y: jug.y + fy });
+        if (e) this.danarEntidad(e, ef.dano || 34);
+        return true;
+      }
+      case 'flash':
+        for (const e of this.entidadesEnRadio(jug, radio)) {
+          e.revelada = true;
+          e.paralizadaHasta = Date.now() + 1800;
+          this.difundir({ t: 'entHit', uid: e.uid });
+        }
+        return true;
+      case 'ruido':
+        this.hacerRuido(jug.x, jug.y, radio);
+        return true;
+      case 'repeler':
+      case 'sellar':
+        for (const e of this.entidadesEnRadio(jug, radio)) e.huyendoHasta = Date.now() + 5000;
+        return true;
+      case 'salida': {
+        const salidas = this.def.salidas.filter((s) => s.destino && DATA.levels[s.destino] && s.tipo !== 'sellada');
+        const salida = salidas.length ? this.rng.pick(salidas) : null;
+        if (!salida || !this.alCruzar) {
+          this.enviar(jug.ws, { t: 'aviso', txt: `${def.nombre} vibra, pero no encuentra ruta estable.` });
+          return true;
+        }
+        this.alCruzar(jug, this, salida);
+        return true;
+      }
+      case 'blink': {
+        const [fx, fy] = cardinalDe(jug.rot ?? Math.PI);
+        for (let d = 5; d >= 2; d--) {
+          const tx = Math.round(jug.x) + fx * d, ty = Math.round(jug.y) + fy * d;
+          if (!esTransitable(this.map, tx, ty)) continue;
+          jug.x = tx; jug.y = ty;
+          // teleport de verdad (como esconder()/cambiarDeSala): sec nuevo para
+          // que caduquen los informes en vuelo del cliente y 'mueve' (ya
+          // manejado por cliente.js) en vez de un 't:tp' que nadie escuchaba
+          jug.sec = (jug.sec || 0) + 1;
+          this.difundir({ t: 'mueve', id: jug.id, x: r2(jug.x), y: r2(jug.y), sec: jug.sec });
+          return true;
+        }
+        this.enviar(jug.ws, { t: 'aviso', txt: `${def.nombre} no encuentra hueco.` });
+        return true;
+      }
+      case 'claridad':
+        this.enviar(jug.ws, { t: 'aviso', txt: `${def.nombre}: entiendes un poco mejor este sitio.` });
+        return true;
+      case 'glitch':
+        for (const e of this.entidadesEnRadio(jug, radio)) {
+          e.revelada = true;
+          this.difundir({ t: 'entHit', uid: e.uid });
+        }
+        return true;
+      case 'celeridad':
+      case 'ocultar':
+      case 'refugio':
+        jug.escondido = { temporal: true };
+        this.difundir({ t: 'esconde', id: jug.id, si: true });
+        return true;
+      case 'riesgo':
+        this.enviar(jug.ws, { t: 'aviso', txt: `${def.nombre} reacciona de forma peligrosa.` });
+        return true;
+      default:
+        return false;
+    }
+  }
+
   usar(jug, mano) {
     if (jug.muerto || jug.escondido) return;
     const id = jug.manos[mano];
-    if (id === 'linterna') { this.luz(jug, !jug.luz); return; }
+    const def = DATA.objects[id];
+    if (def?.efecto?.toggle === 'luz') { this.luz(jug, !jug.luz); return; }
+    if (def?.efecto?.activo && this.usarActivoCatalogo(jug, def)) {
+      if (def.efecto.activo !== 'paralisis') {
+        if (def.manos === 2 || jug.manos[1] === '=') jug.manos = [null, null];
+        else jug.manos[mano] = null;
+        this.enviarInv(jug);
+      }
+      return;
+    }
+    if (!def && id === 'linterna') { this.luz(jug, !jug.luz); return; }
     if (id !== 'tuberia') return;
     const ahora = Date.now();
     if (ahora - (jug.ultGolpe || 0) < 400) return;
@@ -374,7 +601,8 @@ class Sala {
       if (d <= mejor) { mejor = d; e = e2; }
     }
     if (!e) return;
-    e.vida -= 12;
+    const fuerte = [...(jug.inv || []), ...(jug.manos || [])].some((oid) => DATA.objects[oid]?.efecto?.pasivo === 'fuerza');
+    e.vida -= fuerte ? 20 : 12;
     e.revelada = true;
     if (e.vida <= 0) {
       e.viva = false;
@@ -387,8 +615,9 @@ class Sala {
   // la linterna solo alumbra EN LA MANO (v23): el servidor manda, el cliente
   // refleja — luzDe llega también al dueño (nada de encender en local)
   luz(jug, si) {
-    if (si && !jug.manos.includes('linterna')) {
-      this.enviar(jug.ws, { t: 'aviso', txt: 'Necesitas la linterna en la mano (B: mochila, arrástrala a una mano).' });
+    const tieneLuzEnMano = (jug.manos || []).some((id) => DATA.objects[id]?.efecto?.toggle === 'luz');
+    if (si && !tieneLuzEnMano) {
+      this.enviar(jug.ws, { t: 'aviso', txt: 'Necesitas una fuente de luz en la mano (B: mochila, arrastrala a una mano).' });
       si = false;
     }
     if (jug.luz === !!si) return;
@@ -433,29 +662,13 @@ class Sala {
         const def = id && OBJ[id];
         if (!def) return;
         const ef = def.efecto || {};
-        if (ef.salud) {
-          jug.salud = Math.min(100, jug.salud + ef.salud);
+        if (ef.activo && this.usarActivoCatalogo(jug, def)) {
+          if (ef.activo !== 'paralisis') jug.inv.splice(m.slot, 1);
+          aviso(`Usas ${def.nombre}.`);
+        } else if (ef.salud || ef.sed || ef.cordura || ef.ruido) {
+          this.aplicarNumericos(jug, def);
           jug.inv.splice(m.slot, 1);
-          this.enviar(jug.ws, { t: 'salud', valor: jug.salud });
-          aviso(`${def.nombre}: recuperas ${ef.salud} de salud.`);
-        } else if (ef.activo === 'fuego') {
-          jug.inv.splice(m.slot, 1);
-          this.hacerRuido(jug.x, jug.y, 10);
-          for (const e of this.entidades) {
-            if (!e.viva || Math.abs(e.x - jug.x) + Math.abs(e.y - jug.y) > 3) continue;
-            e.vida -= 30;
-            e.huyendoHasta = Date.now() + 4000;
-            if (e.vida <= 0) { e.viva = false; this.difundir({ t: 'entMuere', uid: e.uid }); }
-            else this.difundir({ t: 'entHit', uid: e.uid });
-          }
-          this.difundir({ t: 'golpe', id: jug.id, x: jug.x, y: jug.y });
-        } else if (ef.activo === 'paralisis') {
-          jug.inv.splice(m.slot, 1);
-          for (const e of this.entidades) {
-            if (!e.viva || Math.abs(e.x - jug.x) + Math.abs(e.y - jug.y) > 1) continue;
-            e.paralizadaHasta = Date.now() + 2400;
-            this.difundir({ t: 'entHit', uid: e.uid });
-          }
+          aviso(`Usas ${def.nombre}.`);
         } else if (ef.toggle === 'luz') {
           this.luz(jug, !jug.luz);
         } else {
@@ -504,7 +717,7 @@ class Sala {
     }
     this.enviarInv(jug);
     // si la linterna salió de las manos con la luz encendida, se apaga sola
-    if (jug.luz && !jug.manos.includes('linterna')) this.luz(jug, false);
+    if (jug.luz && !(jug.manos || []).some((id) => DATA.objects[id]?.efecto?.toggle === 'luz')) this.luz(jug, false);
   }
 
   hacerRuido(x, y, radio) {
@@ -518,12 +731,17 @@ class Sala {
     jug.canal = null;
     if (jug.luz) this.luz(jug, false); // la linterna se pierde con el resto
     db.sumarMuerte(jug.token);
+    this.enviar(jug.ws, { t: 'botinReset', semilla: this.semilla });
     this.difundir({ t: 'muere', id: jug.id, causa });
     setTimeout(() => {
       if (!this.jugadores.has(jug.id)) return;
-      jug.salud = 100;
+      jug.salud = 100; jug.sed = 100; jug.cordura = 100;
       jug.muerto = false;
       jug.inv = []; jug.manos = [null, null];
+      // lo VESTIDO también se queda atrás (paridad con startRun del modo solo;
+      // si no, las botas_reforzadas regalaban su bonus para siempre)
+      jug.equipo = { cara: null, cuerpo: null, pies: null };
+      this.enviarInv(jug); // el cliente pisa inv/manos/equipo (mensaje 'inv')
       if (this.alMorir) this.alMorir(jug, this, causa);
     }, 2500);
   }
@@ -663,16 +881,27 @@ class Sala {
 // ---------- registro de salas ----------
 const salas = new Map();
 
-function asignar(nivelId) {
+// Una sala vacía se libera tras un periodo de gracia: si alguien vuelve antes,
+// conserva su estado dinámico (paredes rotas, contenedores registrados,
+// entidades muertas); si no, se recupera la memoria — la misma clave recrea
+// el MISMO mapa desde su semilla. Sin esto el registro solo crecía: cada
+// nivel::instancia visitado retenía su grid y sus entidades para siempre.
+const GRACIA_SALA_VACIA = 5 * 60 * 1000;
+
+function crearSala(nivelId, inst, grupo) {
+  const sala = new Sala(nivelId, inst, grupo);
+  salas.set(claveInterna(nivelId, inst, grupo), sala);
+  console.log(`[sala] abierta ${sala.clave} (${sala.map.grid.w}×${sala.map.grid.h}, ${sala.entidades.length} entidades)`);
+  return sala;
+}
+
+function asignar(nivelId, grupo = SALA_PUBLICA) {
+  grupo = grupoSala(grupo);
   let inst = 1;
   for (;;) {
-    const clave = `${nivelId}::${inst}`;
+    const clave = claveInterna(nivelId, inst, grupo);
     let sala = salas.get(clave);
-    if (!sala) {
-      sala = new Sala(nivelId, inst);
-      salas.set(clave, sala);
-      console.log(`[sala] abierta ${clave} (${sala.map.grid.w}×${sala.map.grid.h}, ${sala.entidades.length} entidades)`);
-    }
+    if (!sala) sala = crearSala(nivelId, inst, grupo);
     if (!sala.llena) return sala;
     inst++;
   }
@@ -683,7 +912,16 @@ const metricas = { ultMs: 0, maxMs: 0, medias: [], bytes: 0, bytesT: Date.now(),
 
 function tickTodas(ahora) {
   const t0 = process.hrtime.bigint();
-  for (const s of salas.values()) {
+  for (const [clave, s] of salas) {
+    if (!s.jugadores.size) {
+      if (!s._vaciaDesde) s._vaciaDesde = ahora;
+      else if (ahora - s._vaciaDesde >= GRACIA_SALA_VACIA) {
+        salas.delete(clave);
+        console.log(`[sala] cerrada ${s.clave} (vacía)`);
+      }
+      continue;
+    }
+    s._vaciaDesde = 0;
     // una sala rota no puede tumbar el resto del mundo
     try { s.tick(ahora); } catch (e) { console.error(`[sala ${s.clave}] tick:`, e.message); }
   }
@@ -699,7 +937,7 @@ function estado() {
     ? metricas.medias.reduce((a, b) => a + b, 0) / metricas.medias.length : 0;
   return {
     salas: [...salas.values()].map((s) => ({
-      clave: s.clave, jugadores: s.jugadores.size,
+      clave: s.clave, privada: s.privada, jugadores: s.jugadores.size,
       entidades: s.entidades.filter((e) => e.viva).length,
     })),
     total: [...salas.values()].reduce((n, s) => n + s.jugadores.size, 0),
@@ -719,4 +957,4 @@ setInterval(() => {
 
 function todas() { return [...salas.values()]; }
 
-module.exports = { Sala, asignar, tickTodas, estado, todas };
+module.exports = { Sala, asignar, tickTodas, estado, todas, SALA_PUBLICA, GRACIA_SALA_VACIA };

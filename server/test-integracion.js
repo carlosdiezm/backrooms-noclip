@@ -175,7 +175,7 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
     c.enviar({ t: 'luz', si: true });
     await espera(500);
     const luzDe = c.buzon.slice(n0).find((e) => e.m.t === 'luzDe' && e.m.id === c.id);
-    const avisoLuz = c.buzon.slice(n0).find((e) => e.m.t === 'aviso' && /linterna/i.test(e.m.txt));
+    const avisoLuz = c.buzon.slice(n0).find((e) => e.m.t === 'aviso' && /(linterna|fuente de luz)/i.test(e.m.txt));
     ok(!luzDe, 'sin linterna en mano NO se difunde luzDe');
     ok(!!avisoLuz, 'sin linterna en mano llega el aviso explicativo');
 
@@ -293,8 +293,19 @@ const espera = (ms) => new Promise((r) => setTimeout(r, ms));
         c.enviar({ t: 'cruzar', si: true });
         const niv2 = await c.espera((m) => m.t === 'nivel', 5000, n0);
         ok(niv2.nivel === nivelId, `la puerta de retorno te devuelve a ${niv2.nivel}`);
-        const d2 = Math.hypot(origen.x - niv2.x, origen.y - niv2.y);
-        ok(d2 <= 8, `y apareces junto a la puerta original (a ${d2.toFixed(1)} tiles)`);
+        // Si la puerta usada para volver es ella misma sin-retorno (p. ej. un
+        // no-clip de un nivel A hacia el nuestro, que no es la MISMA puerta por
+        // la que salimos), cambiarDeSala() no busca pareja natural y usa el
+        // spawn por defecto: no tiene sentido exigir cercanía al origen (misma
+        // regla que esSinRetorno en server.js/game.js).
+        const objetivoSinRetorno = puertaVuelta &&
+          /agujero|caes |caer |caída|desplom|abismo|pozo|trampilla|no.?clip|desmay|despiert/i.test(puertaVuelta.def.texto || '');
+        if (objetivoSinRetorno) {
+          ok(true, 'la puerta usada para volver es sin-retorno (no-clip/caída): no aplica cercanía al origen');
+        } else {
+          const d2 = Math.hypot(origen.x - niv2.x, origen.y - niv2.y);
+          ok(d2 <= 8, `y apareces junto a la puerta original (a ${d2.toFixed(1)} tiles)`);
+        }
       }
     }
 

@@ -223,6 +223,10 @@
     '............', '...p.p.p....', '..pppppp....', '..pppppp.p..',
     '..pppppppp..', '..pppppppp..', '..PpPpPp....', '...ppppp....',
     '...ppppp....', '...mmmmm....', '...mmmmm....', '............'] };
+  D.mando = { pal: { c: '#9a9482', d: '#14120d', r: '#c94a3a', b: '#4a80a8' }, m: [
+    '............', '............', '..cccccccc..', '.cccccccccc.',
+    '.cc.d..b..c.', '.cd.d.c.r.c.', '.cc.d.....c.', '.ccc....ccc.',
+    '..c......c..', '............', '............', '............'] };
   D.pergamino = { pal: { p: '#d8c9a0', P: '#a8946a', l: '#6a5c40' }, m: [
     '............', '..PPPPPPPP..', '..Pppppppp..', '..pllllllp..',
     '..pppppppp..', '..plllllpp..', '..pppppppp..', '..pllllllp..',

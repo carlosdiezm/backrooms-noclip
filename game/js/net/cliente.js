@@ -22,6 +22,7 @@
   let rtt = 100;         // ms ida y vuelta (medido con ping/pong; telemetría)
   let pingTimer = null;
   let ultimoError = null; // último rechazo del servidor (lo muestra el título)
+  let salaActual = null;
   let pasoAcum = 0;       // distancia andada desde el último sonido de paso
   const r2 = (v) => Math.round(v * 100) / 100;
 
@@ -63,13 +64,16 @@
     if (ws && ws.readyState === 1) ws.send(JSON.stringify(msg));
   }
 
-  function iniciar(nombre) {
+  function iniciar(nombre, sala) {
     const w = Game.world;
     const params = new URLSearchParams(location.search);
+    salaActual = sala || null;
+    ultimoError = null;
     ws = new WebSocket(urlServidor());
     ws.onopen = () => enviar({
       t: 'hola', nombre, token: token(), v: 7, // debe coincidir con protocolo.js
       nivel: params.get('nivel') || undefined, // puerta de desarrollo (solo MMO_DEV=1)
+      sala: salaActual || undefined,
     });
     ws.onmessage = (ev) => {
       let m;
@@ -86,9 +90,10 @@
         ultimoError = 'El juego se actualizó y tu navegador cargó una versión vieja. Pulsa Ctrl+F5.';
         return; // reintentar con el mismo código viejo no lleva a nada
       }
+      if (ev && ev.reason === 'sala') return;
       if (w.level) w.log('Conexión perdida con las Backrooms… reintentando.', 'danger');
       clearTimeout(reintento);
-      reintento = setTimeout(() => iniciar(nombre), 3000);
+      reintento = setTimeout(() => iniciar(nombre, salaActual), 3000);
     };
     ws.onerror = () => { ultimoError = ultimoError || 'No se pudo conectar con el servidor.'; };
     // medición de RTT: alimenta la reconciliación y el retardo de interpolación
@@ -222,6 +227,12 @@
         w.player.salud = m.valor;
         w.ui.updateHUD();
         break;
+      case 'estado':
+        w.player.salud = m.salud ?? w.player.salud;
+        w.player.sed = m.sed ?? w.player.sed;
+        w.player.cordura = m.cordura ?? w.player.cordura;
+        w.ui.updateHUD();
+        break;
       case 'inv':
         w.player.inv = m.inv;
         w.player.manos = m.manos;
@@ -245,6 +256,9 @@
           if (p && cerca(w, p[0], p[1], 12)) w.log(`${nombreDe(m.id)} cae al suelo…`, 'danger');
         }
         break;
+      case 'botinReset':
+        try { localStorage.removeItem('mmo-cajas::' + m.semilla); } catch (e) {}
+        break;
 
       // ---------- objetos y salidas ----------
       case 'dado': {
@@ -261,6 +275,17 @@
         break;
       }
       case 'canalFin': break;
+      case 'golpe': {
+        const p = posDe(m.id);
+        if (p) {
+          // Golpe a corta distancia (tubería, etc.)
+          if (window.Effects) {
+            Effects.flash(m.x, m.y, '#e8c95a');
+          }
+          if (window.Sfx && cerca(w, m.x, m.y, 12)) Sfx.play('golpe');
+        }
+        break;
+      }
       case 'abierto': {
         const ex = w.map.exits[m.i];
         if (!ex) return;
@@ -395,8 +420,11 @@
     w.player.rx = m.x; w.player.ry = m.y;
     w.player.rot = m.rot ?? 2;
     w.player.salud = m.salud ?? 100;
+    w.player.sed = m.sed ?? 100;
+    w.player.cordura = m.cordura ?? 100;
     w.player.inv = m.inv || [];
     w.player.manos = m.manos || [null, null];
+    w.player.equipo = m.equipo || { cara: null, cuerpo: null, pies: null };
     w.pasosNivel = m.caminata ? m.caminata.pasos : 0;
     w._caminataObjetivo = m.caminata ? m.caminata.objetivo : 0;
     w._caminataAvisos = {};
@@ -490,8 +518,10 @@
   }
 
   // ---------- botín INDIVIDUAL (v25): cajas, dado y suelo en TU navegador ----------
-  const POOL_CAJAS = ['agua_almendras', 'agua_almendras', 'botiquin', 'amuleto', 'linterna',
-    'chaqueta', 'mascara_gas', 'botas_reforzadas', 'tuberia', 'fuego_griego', 'guante_paralisis', 'trebol'];
+  function poolCajas(w) {
+    const basicos = ['agua_almendras', 'agua_almendras', 'botiquin', 'linterna', 'tuberia', 'trebol'];
+    return basicos.concat(Object.keys(w.data.objects).filter((id) => !basicos.includes(id)));
+  }
 
   function guardarCaja(w, pr) {
     try {
@@ -513,8 +543,9 @@
     if (window.Sfx) Sfx.play('registrar');
     w.rollDice('Registras el contenedor…', (d) => {
       if (d >= 14) {
-        const id = POOL_CAJAS[Math.min(POOL_CAJAS.length - 1,
-          Math.floor((d - 14) / 7 * POOL_CAJAS.length + Math.floor(Math.random() * 3)))];
+        const pool = poolCajas(w);
+        const id = pool[Math.min(pool.length - 1,
+          Math.floor((d - 14) / 7 * pool.length + Math.floor(Math.random() * 3)))];
         if ((w.player.inv || []).length >= 6) {
           w.log(`Dado: ${d}. Hay algo útil… pero no te cabe nada más.`, 'event');
         } else {
@@ -570,6 +601,7 @@
 
   function admin(clave) { enviar({ t: 'admin', clave }); }
   function tp(nivelId) { enviar({ t: 'chat', txt: '/tp ' + nivelId }); }
+  function give(itemId) { enviar({ t: 'chat', txt: '/give ' + itemId }); }
 
   // ---------- chat ----------
   function crearChatUI() {
@@ -620,7 +652,7 @@
 
   window.Net = {
     iniciar, setInput, setMov, setRot, parar, frame,
-    accion, usar, luzToggle, mochila, admin, tp,
+    accion, usar, luzToggle, mochila, admin, tp, give,
     abrirChat, chatAbierto,
     get activo() { return listo; },
     get id() { return miId; },

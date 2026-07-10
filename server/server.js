@@ -14,14 +14,29 @@ const { asignar, tickTodas, estado } = require('./sala');
 const { DATA } = require('./sim/mundo');
 const db = require('./db');
 
-// clave de administración: variable de entorno MMO_ADMIN o una aleatoria
-// impresa al arrancar (el streamer la escribe en el chat: /admin <clave>)
-const ADMIN_CLAVE = process.env.MMO_ADMIN ||
+// clave de administración: variable de entorno MMO_ADMIN, o la última fijada
+// en caliente con /admin-clave (persistida en datos/, fuera del repo), o una
+// aleatoria impresa al arrancar. Un guardián YA autenticado puede cambiarla
+// sin tocar el servidor ni reiniciar nada — process.env solo se lee una vez
+// al arrancar el proceso, así que editar el .service no basta sin restart.
+const ADMIN_CLAVE_FICHERO = path.join(__dirname, 'datos', 'admin-clave.txt');
+let ADMIN_CLAVE = process.env.MMO_ADMIN ||
   Math.random().toString(36).slice(2, 10);
+try {
+  const guardada = fs.readFileSync(ADMIN_CLAVE_FICHERO, 'utf8').trim();
+  if (guardada) ADMIN_CLAVE = guardada;
+} catch (e) { /* sin clave guardada aún: usa MMO_ADMIN o la aleatoria */ }
 
 const PUERTO = parseInt(process.argv[2], 10) || 8080;
 const RAIZ = path.join(__dirname, '..', 'game');
 const NIVEL_INICIAL = 'level-0';
+const RE_SALA_PRIVADA = /^[a-z0-9_-]{3,32}$/;
+
+function codigoSalaPrivada(raw) {
+  const s = String(raw || '').trim().toLowerCase();
+  if (!s) return null;
+  return RE_SALA_PRIVADA.test(s) ? s : false;
+}
 
 // ---------- estáticos (sin dependencias: mimetipos a mano) ----------
 const MIME = {
@@ -99,11 +114,17 @@ wss.on('connection', (ws, req) => {
       const nombre = filtro.nombreLimpio(m.nombre);
       const expediente = db.conectar(m.token, nombre);
       if (expediente.baneado) { ws.close(1008, 'baneado'); return; }
+      const salaPrivada = codigoSalaPrivada(m.sala);
+      if (salaPrivada === false) {
+        sala2enviar(ws, { t: 'error', txt: 'Código de sala privada inválido. Usa 3-32 letras, números, _ o -.' });
+        ws.close(1008, 'sala');
+        return;
+      }
       // puerta de desarrollo (?nivel=): SOLO con MMO_DEV=1 — en producción
       // todo el mundo despierta en Level 0, como manda el lore
       const devOk = process.env.MMO_DEV === '1';
       const nivel = devOk && m.nivel && DATA.levels[m.nivel] ? m.nivel : NIVEL_INICIAL;
-      sala = asignar(nivel);
+      sala = asignar(nivel, salaPrivada || undefined);
       prepararSala(sala);
       jug = sala.entrar(ws, nombre, m.token, expediente);
       jug._reSala = (s) => { sala = s; };  // el cruce actualiza la sala del socket
@@ -165,7 +186,7 @@ function esSinRetorno(def) {
 // mandar el estado nuevo (el cliente reconstruye el mapa desde la semilla)
 function cambiarDeSala(jug, salaVieja, defSalida, opts) {
   salaVieja.salir(jug);
-  const nueva = asignar(defSalida.destino);
+  const nueva = asignar(defSalida.destino, salaVieja.grupo);
   prepararSala(nueva);
   // ---------- puerta de RETORNO (v23): la puerta que cruzaste te espera ----------
   // salvo que llegaras cayendo/por el vacío/noclip (caminata o /tp): de ahí no se vuelve
@@ -199,10 +220,10 @@ function cambiarDeSala(jug, salaVieja, defSalida, opts) {
   const id = jug.id;
   nueva.jugadores.set(id, jug);
   nueva.enviar(jug.ws, {
-    t: 'nivel', nivel: nueva.nivelId, inst: nueva.inst, semilla: nueva.semilla,
+    t: 'nivel', nivel: nueva.nivelId, inst: nueva.inst, semilla: nueva.semilla, privada: nueva.privada,
     x, y, rot: jug.rot, sec: jug.sec, via: defSalida.texto,
     sinTarjeta: !!(opts && opts.sinTarjeta),
-    salud: jug.salud, inv: jug.inv, manos: jug.manos,
+    salud: jug.salud, sed: jug.sed, cordura: jug.cordura, inv: jug.inv, manos: jug.manos, equipo: jug.equipo,
     retorno: jug.retorno,
     caminata: jug.caminataObjetivo ? { pasos: 0, objetivo: jug.caminataObjetivo } : null,
     jugadores: nueva.censo(), ...nueva.estadoDinamico(),
@@ -280,8 +301,36 @@ function comando(jug, sala, linea) {
       return;
     }
     cambiarDeSala(jug, sala, { destino: id, texto: 'El guardián camina por donde quiere.' }, { sinRetorno: true });
+  } else if (cmd === '/give' && arg) {
+    const id = arg.trim();
+    if (!DATA.objects[id]) {
+      sala.enviar(jug.ws, { t: 'aviso', txt: `Objeto desconocido: «${id}»` });
+      return;
+    }
+    if (jug.inv.length >= 6) {
+      sala.enviar(jug.ws, { t: 'aviso', txt: 'Tu mochila está llena.' });
+      return;
+    }
+    jug.inv.push(id);
+    sala.enviarInv(jug);
+    sala.enviar(jug.ws, { t: 'aviso', txt: `Objeto añadido: ${DATA.objects[id].nombre}` });
+  } else if (cmd === '/admin-clave' && arg) {
+    const nueva = arg.trim();
+    if (nueva.length < 3) {
+      sala.enviar(jug.ws, { t: 'aviso', txt: 'La clave debe tener al menos 3 caracteres.' });
+      return;
+    }
+    ADMIN_CLAVE = nueva;
+    try {
+      fs.mkdirSync(path.dirname(ADMIN_CLAVE_FICHERO), { recursive: true });
+      fs.writeFileSync(ADMIN_CLAVE_FICHERO, nueva);
+      sala.enviar(jug.ws, { t: 'aviso', txt: 'Clave de guardián actualizada y guardada: sobrevive a un reinicio.' });
+    } catch (e) {
+      sala.enviar(jug.ws, { t: 'aviso', txt: 'Clave actualizada para esta sesión, pero no se pudo guardar en disco.' });
+    }
+    console.log(`[admin] ${jug.nombre}#${jug.id} cambió la clave de guardián`);
   } else {
-    sala.enviar(jug.ws, { t: 'aviso', txt: 'Comandos: /anuncio <txt> · /kick <nombre> · /mute <nombre> [min] · /ban <nombre> · /tp <nivel>' });
+    sala.enviar(jug.ws, { t: 'aviso', txt: 'Comandos: /anuncio <txt> · /kick <nombre> · /mute <nombre> [min] · /ban <nombre> · /tp <nivel> · /give <objeto> · /admin-clave <nueva>' });
   }
 }
 
@@ -301,5 +350,5 @@ setInterval(() => {
 
 servidor.listen(PUERTO, () => {
   console.log(`BACKROOMS MMO en http://localhost:${PUERTO}  (ws en /ws)`);
-  console.log(`clave de admin: /admin ${ADMIN_CLAVE}   (fija otra con la variable MMO_ADMIN)`);
+  console.log(`clave de admin: /admin ${ADMIN_CLAVE}   (cámbiala en caliente con /admin-clave <nueva> una vez dentro, o fija otra con la variable MMO_ADMIN)`);
 });
