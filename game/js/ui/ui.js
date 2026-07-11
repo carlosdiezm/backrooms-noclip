@@ -894,10 +894,10 @@
         world.busy = false;
     }
   }
-  $('btn-codex-close').onclick = () => toggleCodex(false);
+  if ($('btn-codex-close')) $('btn-codex-close').onclick = () => toggleCodex(false);
   if ($('btn-codex-close-top')) $('btn-codex-close-top').onclick = () => toggleCodex(false);
   $('codex-panel').onclick = (ev) => {
-    if (ev.target === $('codex-panel')) toggleCodex(false);
+    if (ev.target === $('codex-panel') || ev.target.classList.contains('codex-box-wrapper')) toggleCodex(false);
   };
 
   // ---------- changelog ----------
@@ -915,7 +915,7 @@
   }
   if ($('btn-changelog-close-top')) $('btn-changelog-close-top').onclick = () => toggleChangelog(false);
   $('changelog-panel').onclick = (ev) => {
-    if (ev.target === $('changelog-panel')) toggleChangelog(false);
+    if (ev.target === $('changelog-panel') || ev.target.classList.contains('codex-box-wrapper')) toggleChangelog(false);
   };
 
   // ---------- fin ----------

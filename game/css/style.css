@@ -435,7 +435,8 @@ body.fs #game-canvas, body.fs #gl-canvas { border: none; box-shadow: none; }
 /* ---------- códice ---------- */
 #codex-panel, #changelog-panel { position: fixed; inset: 0; background: rgba(3,3,2,.88);
   display: flex; align-items: center; justify-content: center; z-index: 30; }
-.codex-box { position: relative; width: min(720px, 94vw); max-height: 88vh; overflow: auto;
+.codex-box-wrapper { position: relative; max-height: 88vh; }
+.codex-box { width: min(720px, 94vw); max-height: 88vh; overflow: auto;
   border: 8px solid transparent; border-image: var(--marco) 8 fill stretch;
   padding: 24px 30px; }
 .btn-close-box {
