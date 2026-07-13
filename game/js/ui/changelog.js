@@ -4,6 +4,11 @@
 // tanda de cambios (junto con VERSION_JUEGO en main.js).
 (function () {
   const CHANGELOG = [
+    { v: 'v28.11', cambios: [
+      'El modo SIN CONEXIÓN es ahora el mismo juego que el online: movimiento libre, cámara, entidades y todas las mecánicas, con un servidor local corriendo dentro de tu navegador. (El antiguo modo por turnos queda aparcado.)',
+      'La remodelación no euclidiana de los niveles vuelve en el modo sin conexión: los pasillos pueden dejar de llevar al mismo sitio.',
+      'En el modo sin conexión, la fila 🐞 Debug de Ajustes funciona con cualquier clave: es tu propio mundo.',
+    ] },
     { v: 'v28.10', cambios: [
       'La portada ahora muestra cuántos errantes están conectados en este momento. (josealmon)',
       'Arreglado (multijugador): cerrar el códice o el changelog con ESC o su tecla podía dejar la cámara sin responder al clic. (Gartixr)',
