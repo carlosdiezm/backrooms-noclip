@@ -4,6 +4,10 @@
 // tanda de cambios (junto con VERSION_JUEGO en main.js).
 (function () {
   const CHANGELOG = [
+    { v: 'v30.6', cambios: [
+      'La web carga MUCHO más rápida: la portada ya no descarga ningún asset del juego (sprites y sonidos llegan al entrar en partida) y desaparecen los cientos de peticiones fallidas que ensuciaban la consola y la red.',
+      'La pestaña del navegador estrena favicon propio (la puerta pixel-art).',
+    ] },
     { v: 'v30.5', cambios: [
       'Retirada la etiqueta «Teclado + Ratón / Mando» que flotaba arriba del HUD: los iconos de los avisos ya cambian solos según tu dispositivo.',
     ] },
