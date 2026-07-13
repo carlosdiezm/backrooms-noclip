@@ -1,7 +1,7 @@
 // Arranque: input, bucle de animación y pantalla de título.
 (function () {
   // versión visible del juego (Ajustes); súbela con cada tanda de cambios
-  window.VERSION_JUEGO = 'v30.4';
+  window.VERSION_JUEGO = 'v30.5';
   const world = Game.world;
   world.data = window.GAME_DATA;
 
@@ -1066,21 +1066,6 @@
   window.addEventListener('keydown', () => { if (window.Controllers) Controllers.setDevice('keyboard'); });
   // si se desconecta el mando, volvemos a teclado/ratón
   window.addEventListener('gamepaddisconnected', () => { if (window.Controllers) Controllers.clearGamepad(); });
-
-  // v28 — indicador HUD del dispositivo de entrada activo (teclado/Xbox/PS)
-  function updateDeviceIndicator() {
-    const el = document.getElementById('device-indicator');
-    if (!el || !window.Controllers) return;
-    el.innerHTML = '';
-    el.appendChild(Controllers.deviceGlyphImg(16));
-    const txt = document.createElement('span');
-    txt.textContent = ' ' + Controllers.deviceName();
-    el.appendChild(txt);
-  }
-  if (window.Controllers) {
-    Controllers.onChange(updateDeviceIndicator);
-    updateDeviceIndicator();
-  }
 
   window.gamepadDx = 0;
   window.gamepadDy = 0;

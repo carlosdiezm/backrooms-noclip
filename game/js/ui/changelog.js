@@ -4,6 +4,9 @@
 // tanda de cambios (junto con VERSION_JUEGO en main.js).
 (function () {
   const CHANGELOG = [
+    { v: 'v30.5', cambios: [
+      'Retirada la etiqueta «Teclado + Ratón / Mando» que flotaba arriba del HUD: los iconos de los avisos ya cambian solos según tu dispositivo.',
+    ] },
     { v: 'v30.4', cambios: [
       'El modo SIN CONEXIÓN es ahora el mismo juego que el online: movimiento libre, cámara, entidades y todas las mecánicas, con un servidor local corriendo dentro de tu navegador. (El antiguo modo por turnos queda aparcado.)',
       'La remodelación no euclidiana de los niveles vuelve en el modo sin conexión: los pasillos pueden dejar de llevar al mismo sitio.',
