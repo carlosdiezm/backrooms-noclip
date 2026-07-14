@@ -1,7 +1,7 @@
 // Arranque: input, bucle de animación y pantalla de título.
 (function () {
   // versión visible del juego (Ajustes); súbela con cada tanda de cambios
-  window.VERSION_JUEGO = 'v30.9';
+  window.VERSION_JUEGO = 'v30.10';
   const world = Game.world;
   world.data = window.GAME_DATA;
 
@@ -1919,26 +1919,6 @@
   $id('btn-profile-del').onclick = () => {
     const n = P.activeName();
     if (n && confirm(`¿Borrar el perfil «${n}» y todo su códice?`)) { P.remove(n); refreshTitle(); }
-  };
-  $id('btn-profile-export').onclick = () => {
-    const json = P.exportar();
-    if (!json) return;
-    const a = document.createElement('a');
-    a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(json);
-    a.download = `backrooms-perfil-${P.activeName()}.json`;
-    a.click();
-  };
-  $id('btn-profile-import').onclick = () => $id('profile-import-file').click();
-  $id('profile-import-file').onchange = (ev) => {
-    const f = ev.target.files[0];
-    if (!f) return;
-    const r = new FileReader();
-    r.onload = () => {
-      if (P.importar(r.result)) refreshTitle();
-      else alert('Ese archivo no parece un perfil válido.');
-    };
-    r.readAsText(f);
-    ev.target.value = '';
   };
   $id('btn-codex').onclick = () => world.ui.toggleCodex(true);
   $id('btn-changelog').onclick = () => {

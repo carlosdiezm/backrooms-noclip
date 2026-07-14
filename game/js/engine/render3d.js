@@ -1891,13 +1891,20 @@
           target.y = Math.min(target.y, TP.alto + bob);
         }
       }
-      camera.position.lerp(target, orbitando ? 1 : corrDt(TP.suavidad));
+      // v30.10: online la TRASLACIÓN es rígida SIEMPRE (estilo Roblox) — la
+      // física del jugador ya es continua y no necesita amortiguador. El lerp
+      // de posición solo-al-no-orbitar conmutaba entre 0 y ~0.7 tiles de
+      // retraso cada vez que tocabas/soltabas el ratón andando: latigazo de
+      // ~70 px por frame (medido). El suavizado queda para el yaw (continuo)
+      // y para el modo offline por turnos, cuyos pasos discretos sí lo piden.
+      if (world.online) camera.position.copy(target);
+      else camera.position.lerp(target, corrDt(TP.suavidad));
       // mira hacia delante (según la órbita actual: giro suave sin bandazos)
       frame._look = frame._look || new THREE.Vector3(px, TP.lookY, pz);
-      frame._look.lerp(
-        new THREE.Vector3(px - Math.sin(camYaw) * TP.lookAhead, TP.lookY, pz - Math.cos(camYaw) * TP.lookAhead),
-        orbitando ? 1 : corrDt(0.12)
-      );
+      const lookObjetivo = new THREE.Vector3(
+        px - Math.sin(camYaw) * TP.lookAhead, TP.lookY, pz - Math.cos(camYaw) * TP.lookAhead);
+      if (world.online) frame._look.copy(lookObjetivo);
+      else frame._look.lerp(lookObjetivo, corrDt(0.12));
       camera.lookAt(frame._look);
       // si la cámara queda pegada (muro a la espalda), el personaje se desvanece
       // en vez de tapar media pantalla

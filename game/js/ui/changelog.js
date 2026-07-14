@@ -4,6 +4,10 @@
 // tanda de cambios (junto con VERSION_JUEGO en main.js).
 (function () {
   const CHANGELOG = [
+    { v: 'v30.10', cambios: [
+      'Arreglado el tirón al caminar: al mover o soltar el ratón la cámara daba un latigazo (parecía retroceder en el tiempo). Ahora la cámara va clavada a tu personaje, toques el ratón o no.',
+      'La portada pierde los botones Exportar/Importar del expediente.',
+    ] },
     { v: 'v30.9', cambios: [
       'Las salas concurridas van mucho más fluidas: los demás errantes se mueven suaves aunque haya decenas en pantalla, y ya no dan un salto brusco al reanudar la marcha tras estar quietos.',
       'En una multitud, los nombres y bocadillos de chat priorizan a los más cercanos en vez de apilarse ilegibles.',
