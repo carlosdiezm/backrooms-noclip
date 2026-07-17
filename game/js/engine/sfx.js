@@ -160,6 +160,16 @@
       setTimeout(() => ctx && tono(2400, 0.12, 0.14, 'sine', 2100), 300); // tintineo
     },
     muerte() { tono(220, 1.4, 0.4, 'sawtooth', 40); ruido(1.2, 500, 0.2, 'lowpass', 60); },
+    caida() {
+      // caída de ~3 s hacia las Backrooms: silbido de aire que sube + retumbo
+      // grave que se hunde, y golpe sordo al final (portada → partida, v30.14)
+      ruido(1.1, 900, 0.14, 'bandpass', 300);
+      setTimeout(() => ctx && !muted && ruido(1.1, 1900, 0.16, 'bandpass', 600), 900);
+      setTimeout(() => ctx && !muted && ruido(1.0, 3100, 0.18, 'bandpass', 900), 1800);
+      tono(120, 2.6, 0.22, 'sine', 30);
+      setTimeout(() => ctx && !muted && tono(55, 0.35, 0.4, 'sine', 24), 2650);
+      setTimeout(() => ctx && !muted && ruido(0.25, 220, 0.3, 'lowpass', 80), 2650);
+    },
     victoria() { [523, 659, 784, 1047].forEach((f, i) => setTimeout(() => ctx && tono(f, 0.5, 0.2), i * 160)); },
     latido() { tono(55, 0.12, 0.5, 'sine', 40); setTimeout(() => ctx && tono(50, 0.14, 0.4, 'sine', 38), 180); },
     ui() { tono(440, 0.05, 0.06, 'sine'); },
